@@ -31,7 +31,7 @@ Include:
 When deploying Calabi:
 
 - Change all default passwords in `.env` before production use
-- Use a strong `SUPERSET_SECRET_KEY`
+- Use a strong BI session encryption key (`SUPERSET_SECRET_KEY` in `.env`)
 - Restrict network access to ports 8080 and 8088
 - Keep Docker and all images up to date
 - Review the [deployment documentation](https://calabi.bifrost.examroom.ai/docs/platform/deployment) for production hardening

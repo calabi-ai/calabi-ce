@@ -1,5 +1,5 @@
 # =============================================================================
-# Calabi ExamIQ BI — Superset Configuration
+# CalabiIQ BI — Analytics Engine Configuration
 # =============================================================================
 # Branded configuration for Calabi Community Edition
 # Mounted at /app/pythonpath/superset_config.py
@@ -12,7 +12,7 @@ APP_ICON = "/static/assets/calabi-icon.png"
 APP_ICON_WIDTH = 32
 FAVICONS = [{"href": "/static/assets/calabi-favicon.svg"}]
 
-# Hide Superset branding
+# Hide default branding
 SHOW_STACKTRACE = False
 MENU_HIDE_USER_INFO = False
 
@@ -138,7 +138,7 @@ a:hover {
     background: #7c3aed !important;
 }
 
-/* Hide "Powered by Apache Superset" footer text */
+/* Hide default footer text */
 .footer,
 [class*="powered"],
 [class*="Powered"] {
@@ -147,7 +147,6 @@ a:hover {
 """
 
 # ── Database ──────────────────────────────────────────────────────────────────
-# Use Superset's built-in env var handling (avoids psycopg2 import issues)
 # Connection is configured via DATABASE_* env vars in docker-compose
 
 # ── Security ──────────────────────────────────────────────────────────────────

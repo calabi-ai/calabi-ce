@@ -63,7 +63,7 @@ EXISTING=$(api_get "/api/v1/users/name/ce-admin" | grep -o '"email"')
 if [ -n "$EXISTING" ]; then
   echo "  CE admin already exists. Skipping."
 else
-  # OM signup API uses plain password field (RegistrationRequest schema)
+  # Signup API uses plain password field
   # Password must meet complexity: 8+ chars, upper, lower, digit, special
   SIGNUP_RESULT=$(curl -s "$CATALOGUE_URL/api/v1/users/signup" \
     -H "Content-Type: application/json" \
@@ -86,7 +86,7 @@ else
   fi
 fi
 
-# ── Re-authenticate as CE admin + hide default OM admin ──────────────
+# ── Re-authenticate as CE admin + hide default admin ─────────────────
 echo ""
 echo "Securing admin accounts..."
 
@@ -101,7 +101,7 @@ if [ -n "$CE_TOKEN" ]; then
   echo "  Switched to CE admin token."
 fi
 
-# Disable the default OM admin account (hide open-metadata.org branding)
+# Disable the default system admin account
 OM_ADMIN_ID=$(api_get "/api/v1/users/name/admin" \
   | sed -n 's/.*"id":"\([^"]*\)".*/\1/p' | head -1)
 
@@ -226,20 +226,20 @@ else
   echo "  Sample tables created."
 fi
 
-# ── Ingest Superset Dashboard Metadata into OpenMetadata ─────────────
+# ── Ingest BI Dashboard Metadata into Catalogue ─────────────────────
 echo ""
-echo "Ingesting Superset dashboard metadata..."
+echo "Ingesting BI dashboard metadata..."
 
 SS_SERVICE_NAME="calabi_superset"
 SS_SVC_EXISTS=$(api_get "/api/v1/services/dashboardServices/name/$SS_SERVICE_NAME" | grep -o '"id"')
 
 if [ -z "$SS_SVC_EXISTS" ]; then
-  echo "  Creating Superset dashboard service..."
+  echo "  Creating BI dashboard service..."
   api_post "/api/v1/services/dashboardServices" '{
     "name": "calabi_superset",
-    "displayName": "CalabiIQ (Superset)",
+    "displayName": "CalabiIQ Analytics",
     "serviceType": "Superset",
-    "description": "Superset BI dashboards powering CalabiIQ Analytics. Browse dashboards and charts as data assets.",
+    "description": "CalabiIQ BI dashboards and analytics. Browse dashboards and charts as data assets.",
     "connection": {
       "config": {
         "type": "Superset",
@@ -252,35 +252,35 @@ if [ -z "$SS_SVC_EXISTS" ]; then
       }
     }
   }' > /dev/null
-  echo "  Superset service registered."
+  echo "  BI service registered."
 else
-  echo "  Superset service exists."
+  echo "  BI service exists."
 fi
 
-# Wait for Superset to be ready
-echo "  Waiting for Superset..."
+# Wait for BI engine to be ready
+echo "  Waiting for CalabiIQ BI..."
 for i in $(seq 1 30); do
   SS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://calabi-bi:8088/health" 2>/dev/null)
   if [ "$SS_STATUS" = "200" ]; then
-    echo "  Superset ready."
+    echo "  CalabiIQ BI ready."
     break
   fi
   sleep 3
 done
 
-# Get Superset auth token
+# Get BI auth token
 SS_TOKEN=$(curl -s "http://calabi-bi:8088/api/v1/security/login" \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"admin","provider":"db","refresh":true}' 2>/dev/null \
   | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
 
 if [ -n "$SS_TOKEN" ]; then
-  # Fetch all dashboards from Superset
+  # Fetch all dashboards from BI engine
   SS_DASHBOARDS=$(curl -s "http://calabi-bi:8088/api/v1/dashboard/?q=(page_size:50,page:0)" \
     -H "Authorization: Bearer $SS_TOKEN" 2>/dev/null)
 
   DASH_COUNT=$(echo "$SS_DASHBOARDS" | sed -n 's/.*"count":\([0-9]*\).*/\1/p')
-  echo "  Found $DASH_COUNT Superset dashboards."
+  echo "  Found $DASH_COUNT BI dashboards."
 
   # Check if dashboards already ingested
   EXISTING_DASH=$(api_get "/api/v1/dashboards?service=calabi_superset&limit=1" | sed -n 's/.*"total":\([0-9]*\).*/\1/p')
@@ -304,10 +304,10 @@ if [ -n "$SS_TOKEN" ]; then
         api_post "/api/v1/dashboards" "{
           \"name\": \"$DASH_NAME\",
           \"displayName\": \"$DASH_TITLE\",
-          \"description\": \"Superset dashboard: $DASH_TITLE. View at $DASH_URL\",
+          \"description\": \"CalabiIQ dashboard: $DASH_TITLE. View at $DASH_URL\",
           \"sourceUrl\": \"$DASH_URL\",
           \"service\": \"calabi_superset\",
-          \"dashboardType\": \"Superset\"
+          \"dashboardType\": \"CalabiIQ\"
         }" > /dev/null 2>&1
         echo "    + $DASH_TITLE (ID: $DASH_ID)"
       fi
@@ -317,7 +317,7 @@ if [ -n "$SS_TOKEN" ]; then
     SS_CHARTS=$(curl -s "http://calabi-bi:8088/api/v1/chart/?q=(page_size:100,page:0)" \
       -H "Authorization: Bearer $SS_TOKEN" 2>/dev/null)
     CHART_COUNT=$(echo "$SS_CHARTS" | sed -n 's/.*"count":\([0-9]*\).*/\1/p')
-    echo "  Found $CHART_COUNT Superset charts. Registering..."
+    echo "  Found $CHART_COUNT BI charts. Registering..."
 
     echo "$SS_CHARTS" | sed 's/},{/}\n{/g' | while IFS= read -r line; do
       CHART_ID=$(echo "$line" | sed -n 's/.*"id":\([0-9]*\).*/\1/p' | head -1)
@@ -330,7 +330,7 @@ if [ -n "$SS_TOKEN" ]; then
         api_post "/api/v1/charts" "{
           \"name\": \"$SAFE_NAME\",
           \"displayName\": \"$CHART_NAME\",
-          \"description\": \"Superset chart ($CHART_TYPE)\",
+          \"description\": \"CalabiIQ chart ($CHART_TYPE)\",
           \"chartType\": \"Other\",
           \"service\": \"calabi_superset\"
         }" > /dev/null 2>&1
@@ -339,7 +339,7 @@ if [ -n "$SS_TOKEN" ]; then
     echo "  Charts registered."
   fi
 else
-  echo "  WARNING: Could not authenticate with Superset. Skipping dashboard ingestion."
+  echo "  WARNING: Could not authenticate with BI engine. Skipping dashboard ingestion."
 fi
 
 echo ""
@@ -348,5 +348,5 @@ echo " CE setup complete."
 echo " Login: ce-admin@calabi.dev / Calabi@CE2025!"
 echo " URL:   http://localhost:8080"
 echo " Data:  3 databases, 5 schemas, 15 tables"
-echo "       + Superset dashboards & charts"
+echo "       + CalabiIQ dashboards & charts"
 echo "══════════════════════════════════════════════"

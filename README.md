@@ -25,7 +25,7 @@ Calabi replaces multiple standalone data tools with a single, unified platform. 
 | Module | Description |
 |--------|-------------|
 | **Data Catalog** | Metadata discovery, table and column-level documentation, search across all data assets |
-| **CalabiIQ Analytics** | Interactive dashboards, SQL workspace, chart builder (powered by Superset) |
+| **CalabiIQ Analytics** | Interactive dashboards, SQL workspace, chart builder |
 | **Data Governance** | Classification, tagging, glossary management, lineage tracking |
 | **Data Exploration** | Unified search across databases, schemas, tables, dashboards, and charts |
 
@@ -49,7 +49,14 @@ Wait 2-3 minutes for all services to initialize, then open:
 | Calabi Platform | [http://localhost:8080](http://localhost:8080) |
 | CalabiIQ BI (direct) | [http://localhost:8088](http://localhost:8088) |
 
-**Login:** `ce-admin@calabi.dev` / `Calabi@CE2025!`
+### Login Credentials
+
+| Service | URL | Username | Password |
+|---------|-----|----------|----------|
+| **Calabi Platform** | [http://localhost:8080](http://localhost:8080) | `ce-admin@calabi.dev` | `Calabi@CE2025!` |
+| **CalabiIQ BI** | [http://localhost:8088](http://localhost:8088) | Auto-login (no credentials needed) | — |
+
+> **Note:** For production use, change all default passwords in `.env` before deployment.
 
 ### Verify Installation
 
@@ -81,14 +88,14 @@ docker compose logs -f calabi-catalogue
     +---------+--------+ +-------+-------+ +---------+--------+
     | calabi-catalogue | | calabi-bi     | | calabi-license   |
     | Platform UI/API  | | CalabiIQ BI   | | -proxy           |
-    | :8585            | | Superset :8088| | CE limits :8090  |
+    | :8585            | | :8088         | | CE limits :8090  |
     +--------+---------+ +-------+-------+ +------------------+
               |                   |
               +-------------------+
                         |
               +---------+---------+
-              |    PostgreSQL     |
-              |    + OpenSearch   |
+              |   Data Layer      |
+              |   (DB + Search)   |
               +-------------------+
 ```
 
@@ -105,8 +112,8 @@ All configuration is managed through environment variables in `.env`:
 | `CALABI_PORT` | `8080` | Gateway port (main access point) |
 | `POSTGRES_USER` | `calabi` | PostgreSQL username |
 | `POSTGRES_PASSWORD` | `calabi_ce_2025` | PostgreSQL password |
-| `SUPERSET_SECRET_KEY` | (auto) | Superset session encryption key |
-| `SUPERSET_LOAD_EXAMPLES` | `no` | Load sample Superset dashboards |
+| `SUPERSET_SECRET_KEY` | (auto) | CalabiIQ BI session encryption key |
+| `SUPERSET_LOAD_EXAMPLES` | `no` | Load sample BI dashboards |
 | `CE_MAX_CATALOGUE_USERS` | `5` | Maximum users (CE limit) |
 | `CE_MAX_CATALOGUE_ASSETS` | `500` | Maximum data assets (CE limit) |
 

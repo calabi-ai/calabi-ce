@@ -17,7 +17,7 @@ x-common: &common
     - calabi-net
 
 services:
-  # PostgreSQL
+  # Database
   postgres:
     <<: *common
     image: postgres:16-alpine
@@ -40,7 +40,7 @@ services:
           cpus: '1.0'
           memory: 1G
 
-  # OpenSearch
+  # Search Engine
   opensearch:
     <<: *common
     image: opensearchproject/opensearch:2.17.0
@@ -69,7 +69,7 @@ services:
           cpus: '1.0'
           memory: 1.5G
 
-  # Catalogue — Database migrations (one-shot)
+  # Catalogue — database migrations (one-shot)
   calabi-catalogue-init:
     image: ${CALABI_CATALOGUE_IMAGE:-public.ecr.aws/calabi/calabi-catalogue:1.0.0}
     restart: "no"
@@ -103,7 +103,7 @@ services:
       ELASTICSEARCH_PORT: "9200"
       ELASTICSEARCH_SCHEME: http
 
-  # Catalogue — Calabi platform UI and API
+  # Catalogue — Calabi Platform UI and API
   calabi-catalogue:
     <<: *common
     image: ${CALABI_CATALOGUE_IMAGE:-public.ecr.aws/calabi/calabi-catalogue:1.0.0}
@@ -157,10 +157,10 @@ services:
     volumes:
       - ./scripts/ce-setup.sh:/scripts/ce-setup.sh:ro
 
-  # CalabiIQ BI (Superset)
+  # CalabiIQ BI — Analytics Engine
   calabi-bi:
     <<: *common
-    image: ${CALABI_BI_IMAGE:-apache/superset:4.1.1}
+    image: ${CALABI_BI_IMAGE:-public.ecr.aws/calabi/calabi-bi:1.0.0}
     container_name: calabi-bi
     depends_on:
       postgres: { condition: service_healthy }
