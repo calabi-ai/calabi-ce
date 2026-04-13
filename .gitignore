@@ -1,0 +1,45 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Data volumes
+volumes/
+data/
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Build artifacts
+*.jar
+*.war
+*.class
+*.pyc
+__pycache__/
+node_modules/
+dist/
+build/
+
+# Docker
+docker-compose.override.yaml
+docker-compose.override.yml
+
+# Secrets
+*.key
+*.pem
+*.cert
+credentials/
+secrets/
