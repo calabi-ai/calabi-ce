@@ -71,7 +71,7 @@ services:
 
   # Catalogue — database migrations (one-shot)
   calabi-catalogue-init:
-    image: ${CALABI_CATALOGUE_IMAGE:-public.ecr.aws/calabi/calabi-catalogue:1.0.0}
+    image: ${CALABI_CATALOGUE_IMAGE:-ghcr.io/calabi-ai/calabi-catalogue:1.0.0}
     restart: "no"
     networks: [calabi-net]
     container_name: calabi-catalogue-init
@@ -106,7 +106,7 @@ services:
   # Catalogue — Calabi Platform UI and API
   calabi-catalogue:
     <<: *common
-    image: ${CALABI_CATALOGUE_IMAGE:-public.ecr.aws/calabi/calabi-catalogue:1.0.0}
+    image: ${CALABI_CATALOGUE_IMAGE:-ghcr.io/calabi-ai/calabi-catalogue:1.0.0}
     container_name: calabi-catalogue
     depends_on:
       postgres: { condition: service_healthy }
@@ -160,7 +160,7 @@ services:
   # CalabiIQ BI — Analytics Engine
   calabi-bi:
     <<: *common
-    image: ${CALABI_BI_IMAGE:-public.ecr.aws/calabi/calabi-bi:1.0.0}
+    image: ${CALABI_BI_IMAGE:-ghcr.io/calabi-ai/calabi-bi:1.0.0}
     container_name: calabi-bi
     depends_on:
       postgres: { condition: service_healthy }
@@ -207,7 +207,7 @@ services:
   # License proxy (CE limit enforcement)
   calabi-license-proxy:
     <<: *common
-    image: ${CALABI_LICENSE_PROXY_IMAGE:-public.ecr.aws/calabi/calabi-license-proxy:1.0.0}
+    image: ${CALABI_LICENSE_PROXY_IMAGE:-ghcr.io/calabi-ai/calabi-license-proxy:1.0.0}
     container_name: calabi-license-proxy
     environment:
       CALABI_EDITION: "community"
