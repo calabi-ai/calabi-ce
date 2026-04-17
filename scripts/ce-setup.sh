@@ -99,20 +99,24 @@ CE_TOKEN=$(curl -s "$CATALOGUE_URL/api/v1/users/login" \
 if [ -n "$CE_TOKEN" ]; then
   TOKEN="$CE_TOKEN"
   echo "  Switched to CE admin token."
-fi
+  echo "  CE admin login confirmed — ce-admin@calabi.dev is active."
 
-# Disable the default system admin account
-OM_ADMIN_ID=$(api_get "/api/v1/users/name/admin" \
-  | sed -n 's/.*"id":"\([^"]*\)".*/\1/p' | head -1)
+  # Only disable the default system admin AFTER confirming CE admin works
+  OM_ADMIN_ID=$(api_get "/api/v1/users/name/admin" \
+    | sed -n 's/.*"id":"\([^"]*\)".*/\1/p' | head -1)
 
-if [ -n "$OM_ADMIN_ID" ]; then
-  # Soft-delete (disable) the default admin — keeps it for bootstrap but hides from UI
-  curl -s "$CATALOGUE_URL/api/v1/users/$OM_ADMIN_ID" \
-    -X DELETE \
-    -H "Authorization: Bearer $TOKEN" 2>/dev/null > /dev/null
-  echo "  Default admin account disabled (hidden from UI)."
+  if [ -n "$OM_ADMIN_ID" ]; then
+    # Soft-delete (disable) the default admin — keeps it for bootstrap but hides from UI
+    curl -s "$CATALOGUE_URL/api/v1/users/$OM_ADMIN_ID" \
+      -X DELETE \
+      -H "Authorization: Bearer $TOKEN" 2>/dev/null > /dev/null
+    echo "  Default admin account disabled (hidden from UI)."
+  else
+    echo "  Default admin not found (already removed)."
+  fi
 else
-  echo "  Default admin not found (already removed)."
+  echo "  WARNING: CE admin login failed — keeping default admin active as fallback."
+  echo "  Fallback login: admin@open-metadata.org / admin"
 fi
 
 # ── Load Sample Data ─────────────────────────────────────────────────
