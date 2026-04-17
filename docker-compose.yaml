@@ -160,7 +160,7 @@ services:
   # CalabiIQ BI — Analytics Engine
   calabi-bi:
     <<: *common
-    image: ${CALABI_BI_IMAGE:-ghcr.io/calabi-ai/calabi-bi:1.0.0}
+    image: ${CALABI_BI_IMAGE:-ghcr.io/calabi-ai/calabi-bi:1.0.1}
     container_name: calabi-bi
     depends_on:
       postgres: { condition: service_healthy }
