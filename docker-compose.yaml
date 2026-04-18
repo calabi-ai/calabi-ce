@@ -71,7 +71,7 @@ services:
 
   # Catalogue — database migrations (one-shot)
   calabi-catalogue-init:
-    image: ${CALABI_CATALOGUE_IMAGE:-ghcr.io/calabi-ai/calabi-catalogue:1.0.0}
+    image: ${CALABI_CATALOGUE_IMAGE:-ghcr.io/calabi-ai/calabi-catalogue:1.0.1}
     restart: "no"
     networks: [calabi-net]
     container_name: calabi-catalogue-init
@@ -106,7 +106,7 @@ services:
   # Catalogue — Calabi Platform UI and API
   calabi-catalogue:
     <<: *common
-    image: ${CALABI_CATALOGUE_IMAGE:-ghcr.io/calabi-ai/calabi-catalogue:1.0.0}
+    image: ${CALABI_CATALOGUE_IMAGE:-ghcr.io/calabi-ai/calabi-catalogue:1.0.1}
     container_name: calabi-catalogue
     depends_on:
       postgres: { condition: service_healthy }
@@ -160,7 +160,7 @@ services:
   # CalabiIQ BI — Analytics Engine
   calabi-bi:
     <<: *common
-    image: ${CALABI_BI_IMAGE:-ghcr.io/calabi-ai/calabi-bi:1.0.1}
+    image: ${CALABI_BI_IMAGE:-ghcr.io/calabi-ai/calabi-bi:1.0.2}
     container_name: calabi-bi
     depends_on:
       postgres: { condition: service_healthy }
@@ -187,9 +187,6 @@ services:
         superset db upgrade &&
         superset fab create-admin --username admin --firstname Calabi --lastname Admin --email admin@calabi.dev --password $${SUPERSET_ADMIN_PASSWORD:-admin} || true &&
         superset init &&
-        echo 'Loading sample dashboards...' &&
-        superset load-examples --force || true &&
-        echo 'Sample data loaded.' &&
         superset run -h 0.0.0.0 -p 8088 --with-threads
       "
     healthcheck:
