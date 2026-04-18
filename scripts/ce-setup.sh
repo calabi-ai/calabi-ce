@@ -101,16 +101,21 @@ if [ -n "$CE_TOKEN" ]; then
   echo "  Switched to CE admin token."
   echo "  CE admin login confirmed — ce-admin@calabi.dev is active."
 
-  # Only disable the default system admin AFTER confirming CE admin works
+  # Hard-delete the default system admin AFTER confirming CE admin works.
+  # Must soft-delete first, then hard-delete — OpenMetadata requires this sequence.
   OM_ADMIN_ID=$(api_get "/api/v1/users/name/admin" \
     | sed -n 's/.*"id":"\([^"]*\)".*/\1/p' | head -1)
 
   if [ -n "$OM_ADMIN_ID" ]; then
-    # Soft-delete (disable) the default admin — keeps it for bootstrap but hides from UI
+    # Step 1: soft-delete (marks as deleted in DB)
     curl -s "$CATALOGUE_URL/api/v1/users/$OM_ADMIN_ID" \
       -X DELETE \
       -H "Authorization: Bearer $TOKEN" 2>/dev/null > /dev/null
-    echo "  Default admin account disabled (hidden from UI)."
+    # Step 2: hard-delete (permanently removes — prevents login)
+    curl -s "$CATALOGUE_URL/api/v1/users/$OM_ADMIN_ID?hardDelete=true" \
+      -X DELETE \
+      -H "Authorization: Bearer $TOKEN" 2>/dev/null > /dev/null
+    echo "  Default admin account permanently removed (login blocked)."
   else
     echo "  Default admin not found (already removed)."
   fi

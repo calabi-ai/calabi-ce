@@ -204,7 +204,7 @@ services:
   # License proxy (CE limit enforcement)
   calabi-license-proxy:
     <<: *common
-    image: ${CALABI_LICENSE_PROXY_IMAGE:-ghcr.io/calabi-ai/calabi-license-proxy:1.0.0}
+    image: ${CALABI_LICENSE_PROXY_IMAGE:-ghcr.io/calabi-ai/calabi-license-proxy:1.0.1}
     container_name: calabi-license-proxy
     environment:
       CALABI_EDITION: "community"
@@ -212,8 +212,15 @@ services:
       CE_MAX_CATALOGUE_ASSETS: "${CE_MAX_CATALOGUE_ASSETS:-500}"
       CATALOGUE_URL: http://calabi-catalogue:8585
       BI_URL: http://calabi-bi:8088
+      # Postgres — used for reliable user counting (bypasses catalogue API auth)
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${POSTGRES_USER:-calabi}
+      DB_USER_PASSWORD: ${POSTGRES_PASSWORD:-calabi_ce_2025}
+      OM_DATABASE: calabi_catalogue
     depends_on:
       calabi-catalogue: { condition: service_healthy }
+      postgres: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8090/health')\" || exit 1"]
       interval: 10s
