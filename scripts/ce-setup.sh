@@ -284,6 +284,25 @@ SS_TOKEN=$(curl -s "http://calabi-bi:8088/api/v1/security/login" \
   | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
 
 if [ -n "$SS_TOKEN" ]; then
+  # ── Create Calabi demo dashboards if none exist ──────────────────────
+  EXISTING_COUNT=$(curl -s "http://calabi-bi:8088/api/v1/dashboard/?q=(page_size:1)" \
+    -H "Authorization: Bearer $SS_TOKEN" 2>/dev/null \
+    | sed -n 's/.*"count":\([0-9]*\).*/\1/p')
+
+  if [ "${EXISTING_COUNT:-0}" -eq 0 ]; then
+    echo "  No BI dashboards found. Creating Calabi demo dashboards..."
+    for DASH_TITLE in "Sales Performance" "Customer Analytics" "Marketing Attribution" "Operations Overview" "Data Quality Monitor"; do
+      curl -s -X POST "http://calabi-bi:8088/api/v1/dashboard/" \
+        -H "Authorization: Bearer $SS_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{\"dashboard_title\":\"$DASH_TITLE\",\"published\":true}" > /dev/null 2>&1
+      echo "    + $DASH_TITLE"
+    done
+    echo "  Calabi demo dashboards created."
+  else
+    echo "  $EXISTING_COUNT BI dashboards already exist. Skipping creation."
+  fi
+
   # Fetch all dashboards from BI engine
   SS_DASHBOARDS=$(curl -s "http://calabi-bi:8088/api/v1/dashboard/?q=(page_size:50,page:0)" \
     -H "Authorization: Bearer $SS_TOKEN" 2>/dev/null)
