@@ -87,8 +87,8 @@ CUSTOM_CSS = """
    Calabi brand: navy #1e1b4b · purple #7c3aed · Inter font
    ===================================================================== */
 
-/* ── Global font ── */
-*, *::before, *::after {
+/* ── Global font — elements ONLY, NOT ::before/::after (FontAwesome icon fonts use pseudo-elements) ── */
+* {
     font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
 }
 
@@ -277,6 +277,61 @@ a:hover { color: #6d28d9 !important; }
 }
 
 /* =================================================================
+   SEGMENTED CONTROLS (SQL Lab tabs: Saved queries / Query history)
+   Dark text when idle, white text when selected — prevents
+   purple-on-purple unreadable contrast.
+   ================================================================= */
+.ant-segmented {
+    background: #f0eeff !important;
+    border-radius: 6px !important;
+    padding: 2px !important;
+}
+.ant-segmented-item-label {
+    color: #374151 !important;
+    font-weight: 500 !important;
+}
+.ant-segmented-item:hover .ant-segmented-item-label {
+    color: #6d28d9 !important;
+}
+.ant-segmented-item-selected {
+    background: #7c3aed !important;
+    border-radius: 4px !important;
+}
+.ant-segmented-item-selected .ant-segmented-item-label {
+    color: #ffffff !important;
+    font-weight: 600 !important;
+}
+
+/* Dropdown menu items — dark text, purple highlight only on hover bg */
+.ant-dropdown-menu-item,
+.ant-dropdown-menu-submenu-title {
+    color: #374151 !important;
+}
+.ant-dropdown-menu-item:hover,
+.ant-dropdown-menu-submenu-title:hover {
+    background: rgba(124, 58, 237, 0.08) !important;
+    color: #6d28d9 !important;
+}
+.ant-dropdown-menu-item-selected {
+    background: rgba(124, 58, 237, 0.12) !important;
+    color: #7c3aed !important;
+}
+
+/* List items / Select options — same pattern */
+.ant-select-item {
+    color: #374151 !important;
+}
+.ant-select-item-option-selected:not(.ant-select-item-option-disabled) {
+    background: rgba(124, 58, 237, 0.10) !important;
+    color: #7c3aed !important;
+    font-weight: 600 !important;
+}
+.ant-select-item-option-active:not(.ant-select-item-option-disabled) {
+    background: rgba(124, 58, 237, 0.06) !important;
+    color: #374151 !important;
+}
+
+/* =================================================================
    HIDE SUPERSET BRANDING
    ================================================================= */
 .footer,
@@ -309,6 +364,7 @@ CONTENT_SECURITY_POLICY_WARNING = False
 TALISMAN_ENABLED = False
 PUBLIC_ROLE_LIKE = "Admin"
 SHOW_STACKTRACE = False
+PREVENT_UNSAFE_DB_CONNECTIONS = False  # Allow local/internal DB connections in CE
 
 # ── Feature flags ─────────────────────────────────────────────────────────────
 FEATURE_FLAGS = {
@@ -317,7 +373,7 @@ FEATURE_FLAGS = {
     "ENABLE_TEMPLATE_PROCESSING": True,
     "ENABLE_EXPLORE_DRAG_AND_DROP": True,
     "EMBEDDED_SUPERSET": False,
-    "SQLLAB_BACKEND_PERSISTENCE": True,
+    "SQLLAB_BACKEND_PERSISTENCE": False,  # No Celery in CE — use sync mode
     "ENABLE_JAVASCRIPT_CONTROLS": False,
 }
 
