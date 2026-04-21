@@ -235,135 +235,55 @@ else
   echo "  Sample tables created."
 fi
 
-# ── Ingest BI Dashboard Metadata into Catalogue ─────────────────────
+# ── Ingest CalabiIQ (BI) Metadata into Catalogue ─────────────────────
 echo ""
-echo "Ingesting BI dashboard metadata..."
+echo "Ingesting CalabiIQ dashboard metadata..."
 
-SS_SERVICE_NAME="calabi_superset"
-SS_SVC_EXISTS=$(api_get "/api/v1/services/dashboardServices/name/$SS_SERVICE_NAME" | grep -o '"id"')
-
-if [ -z "$SS_SVC_EXISTS" ]; then
-  echo "  Creating BI dashboard service..."
-  api_post "/api/v1/services/dashboardServices" '{
-    "name": "calabi_superset",
-    "displayName": "CalabiIQ Analytics",
-    "serviceType": "Superset",
-    "description": "CalabiIQ BI dashboards and analytics. Browse dashboards and charts as data assets.",
-    "connection": {
-      "config": {
-        "type": "Superset",
-        "hostPort": "http://calabi-bi:8088",
-        "connection": {
-          "username": "admin",
-          "password": "admin",
-          "provider": "db"
-        }
-      }
-    }
-  }' > /dev/null
-  echo "  BI service registered."
-else
-  echo "  BI service exists."
-fi
-
-# Wait for BI engine to be ready
-echo "  Waiting for CalabiIQ BI..."
-for i in $(seq 1 30); do
+# Wait for BI engine to finish seeding its sample dashboards
+echo "  Waiting for CalabiIQ BI to be ready..."
+for i in $(seq 1 60); do
   SS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://calabi-bi:8088/health" 2>/dev/null)
   if [ "$SS_STATUS" = "200" ]; then
-    echo "  CalabiIQ BI ready."
     break
   fi
   sleep 3
 done
 
-# Get BI auth token
-SS_TOKEN=$(curl -s "http://calabi-bi:8088/api/v1/security/login" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin","provider":"db","refresh":true}' 2>/dev/null \
-  | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
-
-if [ -n "$SS_TOKEN" ]; then
-  # BI seeds its own sample dashboards on first run via first_run_seed.sh.
-  # Here we just wait until they are ready, then register them in catalogue.
-  echo "  Waiting for BI sample dashboards to be seeded (first-run only)..."
-  for i in $(seq 1 60); do
-    EXISTING_COUNT=$(curl -s "http://calabi-bi:8088/api/v1/dashboard/?q=(page_size:1)" \
+echo "  Waiting for sample dashboards to be seeded (first-run only)..."
+SS_TOKEN=""
+for i in $(seq 1 60); do
+  SS_TOKEN=$(curl -s "http://calabi-bi:8088/api/v1/security/login" \
+    -H "Content-Type: application/json" \
+    -d '{"username":"admin","password":"admin","provider":"db","refresh":true}' 2>/dev/null \
+    | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+  if [ -n "$SS_TOKEN" ]; then
+    COUNT=$(curl -s "http://calabi-bi:8088/api/v1/dashboard/?q=(page_size:1)" \
       -H "Authorization: Bearer $SS_TOKEN" 2>/dev/null \
       | sed -n 's/.*"count":\([0-9]*\).*/\1/p')
-    if [ "${EXISTING_COUNT:-0}" -ge 5 ]; then
-      echo "  BI has $EXISTING_COUNT dashboards ready."
+    if [ "${COUNT:-0}" -ge 5 ]; then
+      echo "  BI has $COUNT dashboards — seeding complete."
       break
     fi
-    sleep 5
-  done
-
-  # Fetch all dashboards from BI engine
-  SS_DASHBOARDS=$(curl -s "http://calabi-bi:8088/api/v1/dashboard/?q=(page_size:50,page:0)" \
-    -H "Authorization: Bearer $SS_TOKEN" 2>/dev/null)
-
-  DASH_COUNT=$(echo "$SS_DASHBOARDS" | sed -n 's/.*"count":\([0-9]*\).*/\1/p')
-  echo "  Found $DASH_COUNT BI dashboards."
-
-  # Check if dashboards already ingested
-  EXISTING_DASH=$(api_get "/api/v1/dashboards?service=calabi_superset&limit=1" | sed -n 's/.*"total":\([0-9]*\).*/\1/p')
-
-  if [ "${EXISTING_DASH:-0}" -gt 0 ]; then
-    echo "  Dashboards already ingested ($EXISTING_DASH). Skipping."
-  else
-    # Parse and register each dashboard
-    # Extract dashboard IDs and titles using simple parsing
-    echo "$SS_DASHBOARDS" | sed 's/},{/}\n{/g' | while IFS= read -r line; do
-      DASH_ID=$(echo "$line" | sed -n 's/.*"id":\([0-9]*\).*/\1/p' | head -1)
-      DASH_TITLE=$(echo "$line" | sed -n 's/.*"dashboard_title":"\([^"]*\)".*/\1/p' | head -1)
-      DASH_SLUG=$(echo "$line" | sed -n 's/.*"slug":"\([^"]*\)".*/\1/p' | head -1)
-      DASH_STATUS=$(echo "$line" | sed -n 's/.*"published":\([a-z]*\).*/\1/p' | head -1)
-
-      if [ -n "$DASH_ID" ] && [ -n "$DASH_TITLE" ]; then
-        # Create a URL-safe name from title
-        DASH_NAME=$(echo "$DASH_TITLE" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/_/g' | sed 's/__*/_/g' | sed 's/^_//;s/_$//')
-        DASH_URL="http://localhost:8088/superset/dashboard/$DASH_ID/"
-
-        api_post "/api/v1/dashboards" "{
-          \"name\": \"$DASH_NAME\",
-          \"displayName\": \"$DASH_TITLE\",
-          \"description\": \"CalabiIQ dashboard: $DASH_TITLE. View at $DASH_URL\",
-          \"sourceUrl\": \"$DASH_URL\",
-          \"service\": \"calabi_superset\",
-          \"dashboardType\": \"CalabiIQ\"
-        }" > /dev/null 2>&1
-        echo "    + $DASH_TITLE (ID: $DASH_ID)"
-      fi
-    done
-
-    # Also fetch and register charts
-    SS_CHARTS=$(curl -s "http://calabi-bi:8088/api/v1/chart/?q=(page_size:100,page:0)" \
-      -H "Authorization: Bearer $SS_TOKEN" 2>/dev/null)
-    CHART_COUNT=$(echo "$SS_CHARTS" | sed -n 's/.*"count":\([0-9]*\).*/\1/p')
-    echo "  Found $CHART_COUNT BI charts. Registering..."
-
-    echo "$SS_CHARTS" | sed 's/},{/}\n{/g' | while IFS= read -r line; do
-      CHART_ID=$(echo "$line" | sed -n 's/.*"id":\([0-9]*\).*/\1/p' | head -1)
-      CHART_NAME=$(echo "$line" | sed -n 's/.*"slice_name":"\([^"]*\)".*/\1/p' | head -1)
-      CHART_TYPE=$(echo "$line" | sed -n 's/.*"viz_type":"\([^"]*\)".*/\1/p' | head -1)
-
-      if [ -n "$CHART_ID" ] && [ -n "$CHART_NAME" ]; then
-        SAFE_NAME=$(echo "$CHART_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/_/g' | sed 's/__*/_/g' | sed 's/^_//;s/_$//')
-
-        api_post "/api/v1/charts" "{
-          \"name\": \"$SAFE_NAME\",
-          \"displayName\": \"$CHART_NAME\",
-          \"description\": \"CalabiIQ chart ($CHART_TYPE)\",
-          \"chartType\": \"Other\",
-          \"service\": \"calabi_superset\"
-        }" > /dev/null 2>&1
-      fi
-    done
-    echo "  Charts registered."
   fi
+  sleep 5
+done
+
+# Delegate to the Python sync script (robust JSON handling, upsert semantics)
+if command -v python3 >/dev/null 2>&1; then
+  PYBIN=python3
+elif command -v python >/dev/null 2>&1; then
+  PYBIN=python
 else
-  echo "  WARNING: Could not authenticate with BI engine. Skipping dashboard ingestion."
+  # python:3.12-alpine (image base) ships python3 as python3 only
+  echo "  ERROR: no python runtime found in ce-setup container."
+  exit 1
 fi
+
+CATALOGUE_URL="$CATALOGUE_URL" BI_URL="http://calabi-bi:8088" \
+  CATALOGUE_USER="ce-admin@calabi.dev" CATALOGUE_PASSWORD="Q2FsYWJpQENFMjAyNSE=" \
+  BI_USER="admin" BI_PASSWORD="admin" \
+  CALABI_URL="http://localhost:8080" \
+  "$PYBIN" /scripts/sync_bi_metadata.py 2>&1 | sed 's/^/  /'
 
 echo ""
 echo "══════════════════════════════════════════════"

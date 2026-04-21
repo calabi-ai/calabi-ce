@@ -144,18 +144,24 @@ services:
           cpus: '1.0'
           memory: 1.5G
 
-  # Post-startup setup (one-shot)
+  # Post-startup setup (one-shot) — uses python:3.12-alpine for the
+  # robust Superset → catalogue metadata sync (sync_bi_metadata.py).
   calabi-ce-setup:
-    image: alpine:3.19
+    image: python:3.12-alpine
     restart: "no"
     networks: [calabi-net]
     container_name: calabi-ce-setup
     depends_on:
       calabi-catalogue: { condition: service_healthy }
-    entrypoint: ["/bin/sh"]
-    command: ["/scripts/ce-setup.sh"]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        apk add --no-cache curl >/dev/null 2>&1;
+        pip install --quiet --no-cache-dir requests;
+        /bin/sh /scripts/ce-setup.sh
     volumes:
       - ./scripts/ce-setup.sh:/scripts/ce-setup.sh:ro
+      - ./scripts/sync_bi_metadata.py:/scripts/sync_bi_metadata.py:ro
 
   # CalabiIQ BI — Analytics Engine
   calabi-bi:
