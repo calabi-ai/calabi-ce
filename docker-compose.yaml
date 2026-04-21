@@ -228,8 +228,8 @@ services:
       DB_USER_PASSWORD: ${POSTGRES_PASSWORD:-calabi_ce_2025}
       OM_DATABASE: calabi_catalogue
     depends_on:
-      calabi-catalogue: { condition: service_healthy }
-      postgres: { condition: service_healthy }
+      calabi-catalogue: { condition: service_started }
+      postgres:         { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8090/health')\" || exit 1"]
       interval: 10s
@@ -242,23 +242,29 @@ services:
           memory: 128M
 
   # Gateway (single entry point)
+  # NOTE: depends_on uses service_started (not service_healthy). Catalogue
+  # can take 15+ minutes to become healthy on cold boot, and compose's
+  # dependency wait can time out — leaving the gateway stuck in Created
+  # state. Nginx handles upstream 502/504s gracefully while backends boot,
+  # so we let the gateway come up immediately and self-recover.
   calabi-gateway:
     <<: *common
     image: nginx:alpine
     container_name: calabi-gateway
     depends_on:
-      calabi-catalogue: { condition: service_healthy }
-      calabi-bi: { condition: service_healthy }
-      calabi-license-proxy: { condition: service_healthy }
+      calabi-catalogue:   { condition: service_started }
+      calabi-bi:          { condition: service_started }
+      calabi-license-proxy: { condition: service_started }
     volumes:
       - ./config/gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       - "${CALABI_PORT:-8080}:8080"
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/license/health || exit 1"]
-      interval: 10s
+      interval: 15s
       timeout: 5s
-      retries: 3
+      retries: 10
+      start_period: 120s
 
 volumes:
   postgres_data:
