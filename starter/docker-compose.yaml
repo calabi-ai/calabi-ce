@@ -1,0 +1,467 @@
+# =============================================================================
+# Calabi Platform — Starter Tier
+# =============================================================================
+# Starter = Community Edition + Data Engineering module
+#
+#   Same CE images (calabi-catalogue, calabi-bi, calabi-license-proxy)
+#   + 5 new Data Engineering services:
+#     - Airflow (webserver + scheduler) — orchestration
+#     - Airbyte (server + db)           — ingestion engine
+#     - Jupyter Notebooks               — transformation / exploration
+#     - VS Code IDE                     — authoring
+#     - (Calabi Connect UI — coming soon; uses stock Airbyte UI for now)
+#
+# Start:   docker compose up -d
+# Stop:    docker compose down
+# Reset:   docker compose down -v
+#
+# Access (single gateway):   http://localhost:8081
+# Direct service ports:
+#   Airflow UI:              http://localhost:8082
+#   Jupyter Notebooks:       http://localhost:8888
+#   VS Code IDE:             http://localhost:8084
+#   Airbyte (engine):        http://localhost:8086  (temporary — Connect UI coming)
+#
+# Login:   ce-admin@calabi.dev / Calabi@CE2025!
+# Airflow: admin / admin
+# Jupyter: token = calabi-notebooks-2025
+# IDE:     password = calabi-ide-2025
+#
+# Requirements: Docker 24+, 6 CPU, 12GB RAM (Starter uses more than CE)
+# =============================================================================
+
+x-common: &common
+  restart: unless-stopped
+  networks:
+    - calabi-net
+
+x-airflow-common: &airflow-common
+  <<: *common
+  image: ${AIRFLOW_IMAGE:-apache/airflow:2.8.1-python3.11}
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLbfzqDDho=}
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://calabi:${POSTGRES_PASSWORD:-calabi_ce_2025}@postgres:5432/calabi_pipelines
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-calabi-starter-airflow-secret-change-me}
+    AIRFLOW__WEBSERVER__BASE_URL: http://localhost:8082
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+    AIRFLOW__LOGGING__REMOTE_LOGGING: "false"
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    _PIP_ADDITIONAL_REQUIREMENTS: ""
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - ./airflow/plugins:/opt/airflow/plugins
+    - calabi-starter-airflow-logs:/opt/airflow/logs
+  depends_on:
+    postgres: { condition: service_healthy }
+
+services:
+
+  # =============================================================================
+  # CE CORE  (unchanged — same images as Community Edition)
+  # =============================================================================
+
+  postgres:
+    <<: *common
+    image: postgres:16-alpine
+    container_name: calabi-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-calabi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-calabi_ce_2025}
+      POSTGRES_DB: calabi_catalogue
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-calabi}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits: { cpus: '1.0', memory: 1.5G }
+
+  opensearch:
+    <<: *common
+    image: opensearchproject/opensearch:2.17.0
+    container_name: calabi-opensearch
+    environment:
+      - discovery.type=single-node
+      - plugins.security.disabled=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - cluster.name=calabi-starter
+      - bootstrap.memory_lock=true
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=C@labi_OS_2025!
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile: { soft: 65536, hard: 65536 }
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -qE '(green|yellow)'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    deploy:
+      resources:
+        limits: { cpus: '1.0', memory: 1.5G }
+
+  calabi-catalogue-init:
+    image: ${CALABI_CATALOGUE_IMAGE:-ghcr.io/calabi-ai/calabi-catalogue-starter:1.0.0}
+    restart: "no"
+    networks: [calabi-net]
+    container_name: calabi-catalogue-init
+    depends_on:
+      postgres: { condition: service_healthy }
+      opensearch: { condition: service_healthy }
+    entrypoint: ["/bin/bash"]
+    command:
+      - -c
+      - |
+        echo "Running database migrations..."
+        ./bootstrap/openmetadata-ops.sh migrate
+        echo "Running reindex..."
+        ./bootstrap/openmetadata-ops.sh reindex || true
+        echo "Init complete."
+    environment:
+      DB_DRIVER_CLASS: org.postgresql.Driver
+      DB_SCHEME: postgresql
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${POSTGRES_USER:-calabi}
+      DB_USER_PASSWORD: ${POSTGRES_PASSWORD:-calabi_ce_2025}
+      OM_DATABASE: calabi_catalogue
+      SEARCH_TYPE: opensearch
+      OPENSEARCH_HOST: opensearch
+      OPENSEARCH_PORT: "9200"
+      OPENSEARCH_SCHEME: http
+      ELASTICSEARCH_HOST: opensearch
+      ELASTICSEARCH_PORT: "9200"
+      ELASTICSEARCH_SCHEME: http
+
+  calabi-catalogue:
+    <<: *common
+    image: ${CALABI_CATALOGUE_IMAGE:-ghcr.io/calabi-ai/calabi-catalogue-starter:1.0.0}
+    container_name: calabi-catalogue
+    depends_on:
+      postgres: { condition: service_healthy }
+      opensearch: { condition: service_healthy }
+      calabi-catalogue-init: { condition: service_completed_successfully }
+    environment:
+      DB_DRIVER_CLASS: org.postgresql.Driver
+      DB_SCHEME: postgresql
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${POSTGRES_USER:-calabi}
+      DB_USER_PASSWORD: ${POSTGRES_PASSWORD:-calabi_ce_2025}
+      OM_DATABASE: calabi_catalogue
+      SEARCH_TYPE: opensearch
+      OPENSEARCH_HOST: opensearch
+      OPENSEARCH_PORT: "9200"
+      OPENSEARCH_SCHEME: http
+      ELASTICSEARCH_HOST: opensearch
+      ELASTICSEARCH_PORT: "9200"
+      ELASTICSEARCH_SCHEME: http
+      SERVER_PORT: "8585"
+      SERVER_ADMIN_PORT: "8586"
+      AUTHENTICATION_PROVIDER: basic
+      AUTHORIZER_ADMIN_PRINCIPALS: "[admin]"
+      # Starter: Airflow pipeline integration enabled
+      PIPELINE_SERVICE_CLIENT_ENABLED: "true"
+      PIPELINE_SERVICE_CLIENT_CLASS_NAME: "org.openmetadata.service.clients.pipeline.airflow.AirflowRESTClient"
+      PIPELINE_SERVICE_CLIENT_ENDPOINT: http://airflow-webserver:8080
+      PIPELINE_SERVICE_CLIENT_VERIFY_SSL: "no-ssl"
+      PIPELINE_SERVICE_CLIENT_HEALTH_CHECK_INTERVAL: "300"
+      SERVER_HOST_API_URL: http://calabi-catalogue:8585
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8585/api/v1/system/version || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 30
+      start_period: 600s
+    deploy:
+      resources:
+        limits: { cpus: '1.5', memory: 2G }
+
+  calabi-bi:
+    <<: *common
+    image: ${CALABI_BI_IMAGE:-ghcr.io/calabi-ai/calabi-bi:1.0.2}
+    container_name: calabi-bi
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:-calabi-starter-secret-change-me-in-prod}
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_USER: ${POSTGRES_USER:-calabi}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-calabi_ce_2025}
+      DATABASE_DB: calabi_bi
+      DATABASE_DIALECT: postgresql
+      SUPERSET_LOAD_EXAMPLES: "${SUPERSET_LOAD_EXAMPLES:-no}"
+      SUPERSET_CONFIG_PATH: "/app/pythonpath/superset_config.py"
+    ports:
+      - "${BI_PORT:-8088}:8088"
+    volumes:
+      - superset_data:/app/superset_home
+      - ./config/bi/superset_config.py:/app/pythonpath/superset_config.py:ro
+      - ./config/bi/first_run_seed.sh:/app/pythonpath/first_run_seed.sh:ro
+      - ./config/bi/seed_sample_data.py:/app/pythonpath/seed_sample_data.py:ro
+      - ./config/bi/static/calabi-logo.svg:/app/superset/static/assets/calabi-logo.svg:ro
+      - ./config/bi/static/calabi-icon.png:/app/superset/static/assets/calabi-icon.png:ro
+      - ./config/bi/static/calabi-favicon.svg:/app/superset/static/assets/calabi-favicon.svg:ro
+    command: >
+      bash -c "
+        superset db upgrade &&
+        superset fab create-admin --username admin --firstname Calabi --lastname Admin --email admin@calabi.dev --password $${SUPERSET_ADMIN_PASSWORD:-admin} || true &&
+        superset init &&
+        bash /app/pythonpath/first_run_seed.sh &&
+        superset run -h 0.0.0.0 -p 8088 --with-threads
+      "
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8088/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    deploy:
+      resources:
+        limits: { cpus: '0.75', memory: 1G }
+
+  calabi-license-proxy:
+    <<: *common
+    image: ${CALABI_LICENSE_PROXY_IMAGE:-ghcr.io/calabi-ai/calabi-license-proxy:1.0.1}
+    container_name: calabi-license-proxy
+    environment:
+      CALABI_EDITION: "starter"
+      CE_MAX_CATALOGUE_USERS: "${STARTER_MAX_USERS:-25}"
+      CE_MAX_CATALOGUE_ASSETS: "${STARTER_MAX_ASSETS:-5000}"
+      CATALOGUE_URL: http://calabi-catalogue:8585
+      BI_URL: http://calabi-bi:8088
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${POSTGRES_USER:-calabi}
+      DB_USER_PASSWORD: ${POSTGRES_PASSWORD:-calabi_ce_2025}
+      OM_DATABASE: calabi_catalogue
+    depends_on:
+      calabi-catalogue: { condition: service_started }
+      postgres:         { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8090/health')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits: { cpus: '0.25', memory: 128M }
+
+  # =============================================================================
+  # DATA ENGINEERING  (Starter-only additions)
+  # =============================================================================
+
+  # Airflow — orchestration
+  airflow-init:
+    <<: *airflow-common
+    container_name: calabi-airflow-init
+    restart: "no"
+    entrypoint: ["/bin/bash"]
+    command:
+      - -c
+      - |
+        airflow db migrate &&
+        airflow users create \
+          --username admin \
+          --password "${AIRFLOW_ADMIN_PASSWORD:-admin}" \
+          --firstname Calabi --lastname Admin \
+          --role Admin \
+          --email admin@calabi.dev 2>/dev/null || true
+        echo "Airflow init complete."
+
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: calabi-airflow-webserver
+    command: webserver
+    depends_on:
+      postgres:     { condition: service_healthy }
+      airflow-init: { condition: service_completed_successfully }
+    ports:
+      - "${AIRFLOW_PORT:-8082}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    deploy:
+      resources:
+        limits: { cpus: '0.75', memory: 1G }
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: calabi-airflow-scheduler
+    command: scheduler
+    depends_on:
+      postgres:     { condition: service_healthy }
+      airflow-init: { condition: service_completed_successfully }
+    deploy:
+      resources:
+        limits: { cpus: '0.5', memory: 512M }
+
+  # Airbyte DB — separate postgres for Airbyte metadata
+  airbyte-db:
+    <<: *common
+    image: postgres:16-alpine
+    container_name: calabi-airbyte-db
+    environment:
+      POSTGRES_USER: airbyte
+      POSTGRES_PASSWORD: ${AIRBYTE_DB_PASSWORD:-calabi_airbyte_2025}
+      POSTGRES_DB: airbyte
+    volumes:
+      - airbyte_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airbyte"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits: { cpus: '0.5', memory: 512M }
+
+  # Airbyte — ingestion engine (API only; Calabi Connect UI is coming soon)
+  airbyte-server:
+    <<: *common
+    image: airbyte/server:${AIRBYTE_VERSION:-0.64.2}
+    container_name: calabi-airbyte-server
+    environment:
+      AIRBYTE_VERSION: ${AIRBYTE_VERSION:-0.64.2}
+      CONFIG_ROOT: /data
+      TRACKING_STRATEGY: logging
+      DATABASE_USER: airbyte
+      DATABASE_PASSWORD: ${AIRBYTE_DB_PASSWORD:-calabi_airbyte_2025}
+      DATABASE_HOST: airbyte-db
+      DATABASE_PORT: "5432"
+      DATABASE_DB: airbyte
+      WORKER_ENVIRONMENT: docker
+      LOG_LEVEL: INFO
+    volumes:
+      - airbyte_data:/data
+    ports:
+      - "${AIRBYTE_PORT:-8086}:8001"
+    depends_on:
+      airbyte-db: { condition: service_healthy }
+    deploy:
+      resources:
+        limits: { cpus: '0.5', memory: 512M }
+
+  # Jupyter Notebooks — transformation/exploration sandbox
+  calabi-notebooks:
+    <<: *common
+    image: ${CALABI_NOTEBOOKS_IMAGE:-public.ecr.aws/calabi/calabi-notebooks:1.0.0}
+    container_name: calabi-notebooks
+    environment:
+      JUPYTER_ENABLE_LAB: "yes"
+      JUPYTER_TOKEN: ${JUPYTER_TOKEN:-calabi-notebooks-2025}
+      JUPYTER_BASE_URL: /
+    command: >
+      bash -c "start-notebook.sh
+        --NotebookApp.base_url=/
+        --NotebookApp.token=$${JUPYTER_TOKEN:-calabi-notebooks-2025}
+        --NotebookApp.allow_origin=*
+        --NotebookApp.disable_check_xsrf=True"
+    volumes:
+      - notebooks_data:/home/jovyan/work
+    ports:
+      - "${NOTEBOOKS_PORT:-8888}:8888"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import socket; s=socket.socket(); s.settimeout(3); s.connect((\"localhost\", 8888)); s.close()'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits: { cpus: '0.75', memory: 2G }
+
+  # VS Code IDE (code-server) — authoring
+  calabi-ide:
+    <<: *common
+    image: ${CALABI_IDE_IMAGE:-public.ecr.aws/calabi/calabi-ide:1.0.0}
+    container_name: calabi-ide
+    environment:
+      PASSWORD: ${CODE_SERVER_PASSWORD:-calabi-ide-2025}
+    volumes:
+      - ide_data:/home/coder/project
+    ports:
+      - "${IDE_PORT:-8084}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits: { cpus: '0.5', memory: 1G }
+
+  # =============================================================================
+  # POST-STARTUP SETUP  (one-shot — wires everything into the catalogue)
+  # =============================================================================
+
+  calabi-ce-setup:
+    image: python:3.12-alpine
+    restart: "no"
+    networks: [calabi-net]
+    container_name: calabi-ce-setup
+    depends_on:
+      calabi-catalogue: { condition: service_healthy }
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        apk add --no-cache curl >/dev/null 2>&1;
+        pip install --quiet --no-cache-dir requests;
+        /bin/sh /scripts/ce-setup.sh
+    volumes:
+      - ./scripts/ce-setup.sh:/scripts/ce-setup.sh:ro
+      - ./scripts/sync_bi_metadata.py:/scripts/sync_bi_metadata.py:ro
+      - ./scripts/sync_de_metadata.py:/scripts/sync_de_metadata.py:ro
+
+  # =============================================================================
+  # GATEWAY  (single entry point :8081)
+  # =============================================================================
+
+  calabi-gateway:
+    <<: *common
+    image: nginx:alpine
+    container_name: calabi-gateway
+    depends_on:
+      calabi-catalogue:     { condition: service_started }
+      calabi-bi:            { condition: service_started }
+      calabi-license-proxy: { condition: service_started }
+    volumes:
+      - ./config/gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${CALABI_PORT:-8081}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/license/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+
+# =============================================================================
+volumes:
+  postgres_data:      { name: calabi-starter-postgres }
+  opensearch_data:    { name: calabi-starter-opensearch }
+  superset_data:      { name: calabi-starter-superset }
+  airbyte_data:       { name: calabi-starter-airbyte }
+  airbyte_db_data:    { name: calabi-starter-airbyte-db }
+  notebooks_data:     { name: calabi-starter-notebooks }
+  ide_data:           { name: calabi-starter-ide }
+  calabi-starter-airflow-logs:
+                      { name: calabi-starter-airflow-logs }
+
+networks:
+  calabi-net:
+    name: calabi-starter-network
+    driver: bridge

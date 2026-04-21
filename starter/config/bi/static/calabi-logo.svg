@@ -1,0 +1,19 @@
+<svg width="160" height="40" viewBox="0 0 160 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Calabi hex logo - matches production branding -->
+  <g transform="translate(4, 4)">
+    <!-- Outer hex glow -->
+    <path d="M16 1 L28 8 L28 22 L16 29 L4 22 L4 8 Z" fill="#7c3aed" opacity="0.15"/>
+    <!-- Main hex -->
+    <path d="M16 3 L26.5 9.5 L26.5 20.5 L16 27 L5.5 20.5 L5.5 9.5 Z" fill="#7c3aed"/>
+    <!-- Inner detail lines -->
+    <path d="M16 8 L22 11.5 L22 18.5 L16 22 L10 18.5 L10 11.5 Z" fill="none" stroke="#fff" stroke-width="1" opacity="0.4"/>
+    <!-- Center dot -->
+    <circle cx="16" cy="15" r="3.5" fill="#ffffff"/>
+    <!-- Connection nodes -->
+    <circle cx="10" cy="11.5" r="1.5" fill="#fff" opacity="0.6"/>
+    <circle cx="22" cy="11.5" r="1.5" fill="#fff" opacity="0.6"/>
+    <circle cx="16" cy="22" r="1.5" fill="#fff" opacity="0.6"/>
+  </g>
+  <!-- Text -->
+  <text x="42" y="27" fill="#1e1b4b" font-size="22" font-weight="800" font-family="Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" letter-spacing="-0.5">calabi</text>
+</svg>
