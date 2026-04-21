@@ -71,7 +71,7 @@ services:
 
   # Catalogue — database migrations (one-shot)
   calabi-catalogue-init:
-    image: ${CALABI_CATALOGUE_IMAGE:-ghcr.io/calabi-ai/calabi-catalogue:1.0.3}
+    image: ${CALABI_CATALOGUE_IMAGE:-ghcr.io/calabi-ai/calabi-catalogue:1.0.4}
     restart: "no"
     networks: [calabi-net]
     container_name: calabi-catalogue-init
@@ -106,7 +106,7 @@ services:
   # Catalogue — Calabi Platform UI and API
   calabi-catalogue:
     <<: *common
-    image: ${CALABI_CATALOGUE_IMAGE:-ghcr.io/calabi-ai/calabi-catalogue:1.0.3}
+    image: ${CALABI_CATALOGUE_IMAGE:-ghcr.io/calabi-ai/calabi-catalogue:1.0.4}
     container_name: calabi-catalogue
     depends_on:
       postgres: { condition: service_healthy }
