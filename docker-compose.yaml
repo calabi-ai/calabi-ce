@@ -179,6 +179,8 @@ services:
     volumes:
       - superset_data:/app/superset_home
       - ./config/bi/superset_config.py:/app/pythonpath/superset_config.py:ro
+      - ./config/bi/first_run_seed.sh:/app/pythonpath/first_run_seed.sh:ro
+      - ./config/bi/seed_sample_data.py:/app/pythonpath/seed_sample_data.py:ro
       - ./config/bi/static/calabi-logo.svg:/app/superset/static/assets/calabi-logo.svg:ro
       - ./config/bi/static/calabi-icon.png:/app/superset/static/assets/calabi-icon.png:ro
       - ./config/bi/static/calabi-favicon.svg:/app/superset/static/assets/calabi-favicon.svg:ro
@@ -187,6 +189,7 @@ services:
         superset db upgrade &&
         superset fab create-admin --username admin --firstname Calabi --lastname Admin --email admin@calabi.dev --password $${SUPERSET_ADMIN_PASSWORD:-admin} || true &&
         superset init &&
+        bash /app/pythonpath/first_run_seed.sh &&
         superset run -h 0.0.0.0 -p 8088 --with-threads
       "
     healthcheck:
