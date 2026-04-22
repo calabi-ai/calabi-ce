@@ -288,14 +288,31 @@ CATALOGUE_URL="$CATALOGUE_URL" BI_URL="http://calabi-bi:8088" \
 # ── Starter addition: Data Engineering sync ─────────────────────────
 # Registers Airflow DAGs as Pipelines in the catalogue so they show up
 # in /explore and /data-engineering pages of the prod Calabi UI.
+# Retries up to 30 times (5 min total) until Airflow API is ready + DAGs
+# have been loaded. Airflow needs time to parse DAGs after first boot.
 if [ -f /scripts/sync_de_metadata.py ]; then
   echo ""
   echo "Ingesting Data Engineering metadata (Airflow DAGs)..."
-  CATALOGUE_URL="$CATALOGUE_URL" AIRFLOW_URL="http://airflow-webserver:8080" \
-    CATALOGUE_USER="ce-admin@calabi.dev" CATALOGUE_PASSWORD="Q2FsYWJpQENFMjAyNSE=" \
-    AIRFLOW_USER="admin" AIRFLOW_PASSWORD="${AIRFLOW_ADMIN_PASSWORD:-admin}" \
-    CALABI_URL="http://localhost:8081" \
-    "$PYBIN" /scripts/sync_de_metadata.py 2>&1 | sed 's/^/  /'
+  DE_SYNCED=0
+  for attempt in $(seq 1 30); do
+    DE_OUTPUT=$(CATALOGUE_URL="$CATALOGUE_URL" AIRFLOW_URL="http://airflow-webserver:8080" \
+      CATALOGUE_USER="ce-admin@calabi.dev" CATALOGUE_PASSWORD="Q2FsYWJpQENFMjAyNSE=" \
+      AIRFLOW_USER="admin" AIRFLOW_PASSWORD="${AIRFLOW_ADMIN_PASSWORD:-admin}" \
+      CALABI_URL="http://localhost:8081" \
+      "$PYBIN" /scripts/sync_de_metadata.py 2>&1)
+    echo "$DE_OUTPUT" | sed 's/^/  /'
+    # Success if we synced >=1 DAG
+    if echo "$DE_OUTPUT" | grep -qE "Synced: [1-9][0-9]* Airflow DAGs"; then
+      DE_SYNCED=1
+      break
+    fi
+    echo "  DE sync attempt $attempt/30 got 0 DAGs — Airflow may still be starting, retrying in 10s..."
+    sleep 10
+  done
+  if [ "$DE_SYNCED" = "0" ]; then
+    echo "  WARN: DE sync completed with 0 DAGs after 30 retries. Airflow may be unhealthy."
+    echo "  Re-run manually once Airflow is healthy: docker exec calabi-ce-setup python /scripts/sync_de_metadata.py"
+  fi
 fi
 
 echo ""
