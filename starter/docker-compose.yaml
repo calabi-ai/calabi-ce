@@ -37,14 +37,16 @@ x-common: &common
 
 x-airflow-common: &airflow-common
   <<: *common
-  image: ${AIRFLOW_IMAGE:-apache/airflow:2.8.1-python3.11}
+  image: ${AIRFLOW_IMAGE:-apache/airflow:2.9.3}
+  platform: linux/amd64
   environment: &airflow-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLbfzqDDho=}
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://calabi:${POSTGRES_PASSWORD:-calabi_ce_2025}@postgres:5432/calabi_pipelines
     AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-calabi-starter-airflow-secret-change-me}
-    AIRFLOW__WEBSERVER__BASE_URL: http://localhost:8082
+    AIRFLOW__WEBSERVER__BASE_URL: ${AIRFLOW_BASE_URL:-http://localhost:8082}
+    AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
     AIRFLOW__LOGGING__REMOTE_LOGGING: "false"
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
@@ -281,7 +283,9 @@ services:
   airflow-webserver:
     <<: *airflow-common
     container_name: calabi-airflow-webserver
-    command: webserver
+    # Bypass dumb-init entrypoint (broken in some pulls of this tag)
+    entrypoint: ["/bin/bash"]
+    command: ["-c", "airflow webserver"]
     depends_on:
       postgres:     { condition: service_healthy }
       airflow-init: { condition: service_completed_successfully }
@@ -300,7 +304,8 @@ services:
   airflow-scheduler:
     <<: *airflow-common
     container_name: calabi-airflow-scheduler
-    command: scheduler
+    entrypoint: ["/bin/bash"]
+    command: ["-c", "airflow scheduler"]
     depends_on:
       postgres:     { condition: service_healthy }
       airflow-init: { condition: service_completed_successfully }
@@ -308,51 +313,13 @@ services:
       resources:
         limits: { cpus: '0.5', memory: 512M }
 
-  # Airbyte DB — separate postgres for Airbyte metadata
-  airbyte-db:
-    <<: *common
-    image: postgres:16-alpine
-    container_name: calabi-airbyte-db
-    environment:
-      POSTGRES_USER: airbyte
-      POSTGRES_PASSWORD: ${AIRBYTE_DB_PASSWORD:-calabi_airbyte_2025}
-      POSTGRES_DB: airbyte
-    volumes:
-      - airbyte_db_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U airbyte"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    deploy:
-      resources:
-        limits: { cpus: '0.5', memory: 512M }
-
-  # Airbyte — ingestion engine (API only; Calabi Connect UI is coming soon)
-  airbyte-server:
-    <<: *common
-    image: airbyte/server:${AIRBYTE_VERSION:-0.64.2}
-    container_name: calabi-airbyte-server
-    environment:
-      AIRBYTE_VERSION: ${AIRBYTE_VERSION:-0.64.2}
-      CONFIG_ROOT: /data
-      TRACKING_STRATEGY: logging
-      DATABASE_USER: airbyte
-      DATABASE_PASSWORD: ${AIRBYTE_DB_PASSWORD:-calabi_airbyte_2025}
-      DATABASE_HOST: airbyte-db
-      DATABASE_PORT: "5432"
-      DATABASE_DB: airbyte
-      WORKER_ENVIRONMENT: docker
-      LOG_LEVEL: INFO
-    volumes:
-      - airbyte_data:/data
-    ports:
-      - "${AIRBYTE_PORT:-8086}:8001"
-    depends_on:
-      airbyte-db: { condition: service_healthy }
-    deploy:
-      resources:
-        limits: { cpus: '0.5', memory: 512M }
+  # Airbyte (ingestion engine) — NOT included in Starter v1.
+  # airbyte/server:0.64.2 cannot run standalone — Airbyte OSS requires 7+
+  # companion containers (temporal, worker, bootloader, connector-builder,
+  # api-server, cron, webapp) that would push Starter beyond 20+ services.
+  # The Data Engineering page's Ingestion section gracefully degrades to
+  # "0 sources · 0 destinations" via a gateway short-circuit.
+  # Ingestion will ship as a Pro-tier add-on with the branded Calabi Connect UI.
 
   # Jupyter Notebooks — transformation/exploration sandbox
   calabi-notebooks:
@@ -454,8 +421,6 @@ volumes:
   postgres_data:      { name: calabi-starter-postgres }
   opensearch_data:    { name: calabi-starter-opensearch }
   superset_data:      { name: calabi-starter-superset }
-  airbyte_data:       { name: calabi-starter-airbyte }
-  airbyte_db_data:    { name: calabi-starter-airbyte-db }
   notebooks_data:     { name: calabi-starter-notebooks }
   ide_data:           { name: calabi-starter-ide }
   calabi-starter-airflow-logs:

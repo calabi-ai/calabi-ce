@@ -9,10 +9,9 @@ The Starter tier adds 5 additional services on top of Community Edition, all wir
 | Service | Role | Port (direct) |
 |---|---|---|
 | **Airflow** | Orchestration (DAGs, schedulers) | :8082 |
-| **Airbyte** | Ingestion engine (sources + destinations) | :8086 |
 | **Jupyter Notebooks** | Interactive transformation / exploration | :8888 |
 | **VS Code IDE** | In-browser authoring | :8084 |
-| **Calabi Connect** | Branded Airbyte UI (coming soon) | — |
+| Calabi Connect (Ingestion) | — | Pro-tier add-on |
 
 All of these light up **Data Engineering** and **Data Quality** modules in the Calabi Platform UI (both locked in CE, unlocked in Starter).
 
