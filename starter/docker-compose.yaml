@@ -111,7 +111,7 @@ services:
         limits: { cpus: '1.0', memory: 1.5G }
 
   calabi-catalogue-init:
-    image: ${CALABI_CATALOGUE_IMAGE:-ghcr.io/calabi-ai/calabi-catalogue-starter:1.0.7}
+    image: ${CALABI_CATALOGUE_IMAGE:-ghcr.io/calabi-ai/calabi-catalogue-starter:1.0.10}
     restart: "no"
     networks: [calabi-net]
     container_name: calabi-catalogue-init
@@ -145,7 +145,7 @@ services:
 
   calabi-catalogue:
     <<: *common
-    image: ${CALABI_CATALOGUE_IMAGE:-ghcr.io/calabi-ai/calabi-catalogue-starter:1.0.7}
+    image: ${CALABI_CATALOGUE_IMAGE:-ghcr.io/calabi-ai/calabi-catalogue-starter:1.0.10}
     container_name: calabi-catalogue
     depends_on:
       postgres: { condition: service_healthy }
