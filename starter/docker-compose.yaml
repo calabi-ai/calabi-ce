@@ -111,7 +111,7 @@ services:
         limits: { cpus: '1.0', memory: 1.5G }
 
   calabi-catalogue-init:
-    image: ${CALABI_CATALOGUE_IMAGE:-ghcr.io/calabi-ai/calabi-catalogue-starter:1.0.11}
+    image: ${CALABI_CATALOGUE_IMAGE:-ghcr.io/calabi-ai/calabi-catalogue-starter:1.0.20}
     restart: "no"
     networks: [calabi-net]
     container_name: calabi-catalogue-init
@@ -145,7 +145,7 @@ services:
 
   calabi-catalogue:
     <<: *common
-    image: ${CALABI_CATALOGUE_IMAGE:-ghcr.io/calabi-ai/calabi-catalogue-starter:1.0.11}
+    image: ${CALABI_CATALOGUE_IMAGE:-ghcr.io/calabi-ai/calabi-catalogue-starter:1.0.20}
     container_name: calabi-catalogue
     depends_on:
       postgres: { condition: service_healthy }
@@ -370,6 +370,67 @@ services:
     deploy:
       resources:
         limits: { cpus: '0.5', memory: 1G }
+
+  # =============================================================================
+  # CALABI CONNECT  (Airbyte-compatible ingestion UI — data connector sync)
+  # =============================================================================
+  #
+  # Two-tier architecture:
+  #   calabi-connect-server  → FastAPI service implementing minimum Airbyte v1
+  #                            API surface. Stores sources/destinations/
+  #                            connections/jobs in the shared Postgres
+  #                            (database: calabi_connect). Replaces the full
+  #                            Airbyte OSS stack (7 containers) with one.
+  #   calabi-connect         → BFF + React SPA. Proxies to connect-server via
+  #                            AIRBYTE_URL. What the user sees in the iframe.
+  #
+
+  calabi-connect-server:
+    <<: *common
+    image: ${CALABI_CONNECT_SERVER_IMAGE:-ghcr.io/calabi-ai/calabi-connect-server:1.0.0}
+    container_name: calabi-connect-server
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_USER: ${POSTGRES_USER:-calabi}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-calabi_ce_2025}
+      DATABASE_DB: calabi_connect
+      AIRBYTE_WORKSPACE_ID: "00000000-0000-0000-0000-000000000001"
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request,sys; sys.exit(0 if urllib.request.urlopen(\"http://localhost:8001/health\").status==200 else 1)' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits: { cpus: '0.25', memory: 256M }
+
+  calabi-connect:
+    <<: *common
+    image: ${CALABI_CONNECT_IMAGE:-ghcr.io/calabi-ai/calabi-connect:1.0.1}
+    container_name: calabi-connect
+    depends_on:
+      calabi-connect-server: { condition: service_healthy }
+    environment:
+      CALABI_CONNECT_PORT: "8000"
+      # Point the BFF at the local Airbyte-compatible backend (no external
+      # Airbyte OSS stack required — see calabi-connect-server above).
+      AIRBYTE_URL: http://calabi-connect-server:8001
+      AIRBYTE_WORKSPACE_ID: "00000000-0000-0000-0000-000000000001"
+    ports:
+      - "${CONNECT_PORT:-8089}:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request,sys; sys.exit(0 if urllib.request.urlopen(\"http://localhost:8000/\").status==200 else 1)' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits: { cpus: '0.5', memory: 512M }
 
   # =============================================================================
   # POST-STARTUP SETUP  (one-shot — wires everything into the catalogue)

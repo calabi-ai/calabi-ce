@@ -14,3 +14,8 @@ GRANT ALL PRIVILEGES ON DATABASE calabi_bi TO calabi;
 -- Calabi Airflow (Starter-only — orchestration metadata)
 CREATE DATABASE calabi_pipelines;
 GRANT ALL PRIVILEGES ON DATABASE calabi_pipelines TO calabi;
+
+-- Calabi Connect (Starter-only — sources/destinations/connections/jobs
+-- for the Airbyte-compatible backend at calabi-connect-server:8001)
+CREATE DATABASE calabi_connect;
+GRANT ALL PRIVILEGES ON DATABASE calabi_connect TO calabi;
